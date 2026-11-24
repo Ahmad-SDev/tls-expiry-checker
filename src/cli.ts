@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { checkCertificates, needsAttention } from "./check.ts";
 import { formatTable } from "./format.ts";
+import { parseWholeNumber } from "./options.ts";
 import { parseTarget, parseTargetList } from "./target.ts";
 import { TlsCertificateFetcher } from "./tls-fetcher.ts";
 import type { Target } from "./types.ts";
@@ -39,7 +40,13 @@ async function main(argv: string[]): Promise<number> {
   }
 
   let targets: Target[];
+  let warnDays: number;
+  let timeoutMs: number;
+  let concurrency: number;
   try {
+    warnDays = parseWholeNumber("warn-days", values["warn-days"], 0, 3650);
+    timeoutMs = parseWholeNumber("timeout", values.timeout, 100, 120_000);
+    concurrency = parseWholeNumber("concurrency", values.concurrency, 1, 256);
     targets = await collectTargets(positionals, values.file);
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
@@ -50,10 +57,7 @@ async function main(argv: string[]): Promise<number> {
     return 2;
   }
 
-  const reports = await checkCertificates(targets, new TlsCertificateFetcher({ timeoutMs: Number(values.timeout) }), {
-    warnDays: Number(values["warn-days"]),
-    concurrency: Number(values.concurrency),
-  });
+  const reports = await checkCertificates(targets, new TlsCertificateFetcher({ timeoutMs }), { warnDays, concurrency });
 
   console.log(values.json ? JSON.stringify(reports, null, 2) : formatTable(reports));
   return reports.some(needsAttention) ? 1 : 0;
